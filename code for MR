@@ -1,0 +1,76 @@
+import pandas as pd
+import numpy as np
+from sklearn.feature_extraction.text import CountVectorizer
+from sklearn.metrics.pairwise import cosine_similarity
+movies = pd.read_csv('tmdb_5000_movies.csv')
+credits = pd.read_csv('tmdb_5000_credits.csv')
+movies = movies.merge(credits, on='title')
+print(movies.columns)
+print(movies[['genres', 'keywords', 'cast', 'crew']].head())
+import pandas as pd
+import numpy as np
+from sklearn.feature_extraction.text import CountVectorizer
+from sklearn.metrics.pairwise import cosine_similarity
+import ast
+
+# Load datasets
+movies = pd.read_csv('tmdb_5000_movies.csv')
+credits = pd.read_csv('tmdb_5000_credits.csv')
+
+# Merge on 'title'
+movies = movies.merge(credits, on='title')
+
+# Function to convert JSON-formatted columns to lists
+def convert(obj):
+    try:
+        l = []
+        for i in ast.literal_eval(obj):
+            l.append(i['name'])
+        return l
+    except (ValueError, SyntaxError):
+        return []
+
+# Convert 'genres' and 'keywords' columns
+movies['genres'] = movies['genres'].apply(convert)
+movies['keywords'] = movies['keywords'].apply(convert)
+
+# Convert 'cast' column to include only the first three members
+movies['cast'] = movies['cast'].apply(lambda x: [i['name'] for i in ast.literal_eval(x)[:3]] if pd.notnull(x) else [])
+
+# Convert 'crew' column to include only the director's name
+movies['crew'] = movies['crew'].apply(lambda x: [i['name'] for i in ast.literal_eval(x) if i['job'] == 'Director'] if pd.notnull(x) else [])
+
+# Fill missing values in 'overview' and split into words
+movies['overview'] = movies['overview'].fillna('')
+movies['overview'] = movies['overview'].apply(lambda x: x.split())
+
+# Combine all columns into a single 'tags' column
+movies['tags'] = movies['overview'] + movies['genres'] + movies['keywords'] + movies['cast'] + movies['crew']
+
+# Convert the list in 'tags' column to a single string and apply lowercase transformation
+movies['tags'] = movies['tags'].apply(lambda x: " ".join(x).lower())
+
+# Check the first few rows to confirm changes
+print(movies[['title', 'tags']].head())
+cv = CountVectorizer(max_features=5000, stop_words='english')
+vectors = cv.fit_transform(movies['tags']).toarray()
+cosine_sim = cosine_similarity(vectors)
+def recommend(movie_title):
+    movie_idx = movies[movies['title'] == movie_title].index[0]
+    distances = cosine_sim[movie_idx]
+    movie_list = sorted(list(enumerate(distances)), reverse=True, key=lambda x: x[1])[1:6]
+
+    for i in movie_list:
+        print(movies.iloc[i[0]].title)
+
+def popular_recommendations(n=5):
+    popular_movies = movies.sort_values(by='vote_average', ascending=False).head(n)
+    return popular_movies[['title', 'vote_average']]
+def hybrid_recommend(movie_title):
+    print("Content-based Recommendations:")
+    recommend(movie_title)
+    print("\nPopular Movies Recommendations:")
+    print(popular_recommendations(2))
+
+
+hybrid_recommend('Avatar')
